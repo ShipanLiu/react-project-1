@@ -49,15 +49,37 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         
-    - name: Setup SSH for Cloudflare Tunnel
+    - name: Install and setup Cloudflare tunnel
       run: |
+        # Install cloudflared
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        sudo dpkg -i cloudflared-linux-amd64.deb
+        
+        # Setup SSH key
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
         
-    - name: Create deployment script
+        # Create SSH config for Cloudflare tunnel
+        cat > ~/.ssh/config << 'EOF'
+        Host cf-tunnel
+            HostName ${{ secrets.CF_SSH_HOSTNAME }}
+            User ${{ secrets.SERVER_USER }}
+            IdentityFile ~/.ssh/id_ed25519
+            ProxyCommand cloudflared access ssh --hostname ${{ secrets.CF_SSH_HOSTNAME }}
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+        EOF
+        
+    - name: Test SSH connection
       run: |
-        cat > remote-deploy.sh << 'EOF'
+        # Test the connection first
+        ssh cf-tunnel "echo 'SSH connection successful!' && whoami && pwd"
+        
+    - name: Deploy to server
+      run: |
+        # Create deployment script
+        cat > deploy.sh << 'EOF'
         #!/bin/bash
         set -e
         
@@ -78,7 +100,7 @@ jobs:
             ports:
               - "3000:80"
             healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost/health"]
+              test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
               interval: 30s
               timeout: 10s
               retries: 3
@@ -92,33 +114,35 @@ jobs:
         docker-compose down || true
         docker-compose up -d
         
-        echo "🧹 Cleanup..."
+        echo "🧹 Cleanup old images..."
         docker image prune -f
         
         echo "✅ Deployment complete!"
         
-        # Verify
-        sleep 10
+        # Verify deployment
+        echo "🔍 Verifying deployment..."
+        sleep 15
+        
         if docker ps | grep -q react-project-1; then
-          echo "✅ Container running"
-          if curl -f http://localhost:3000/health 2>/dev/null; then
+          echo "✅ Container is running"
+          docker ps --filter "name=react-project-1"
+          
+          # Check if the service responds
+          if wget --spider --quiet http://localhost:3000/health 2>/dev/null; then
             echo "✅ Health check passed"
+            echo "🎉 Deployment successful!"
           else
-            echo "⚠️ Health check failed, but container is running"
+            echo "⚠️  Health check failed, but container is running"
+            echo "Container logs:"
+            docker logs react-project-1 --tail 20
           fi
         else
-          echo "❌ Container not running"
+          echo "❌ Container failed to start"
+          echo "Docker logs:"
+          docker logs react-project-1 --tail 20 || echo "No logs available"
           exit 1
         fi
         EOF
         
-        chmod +x remote-deploy.sh
-        
-    - name: Deploy via SSH with Cloudflare Tunnel
-      run: |
-        # Use SSH with ProxyCommand for Cloudflare tunnel
-        ssh -o StrictHostKeyChecking=no \
-            -o ProxyCommand="curl -s https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -L -o /tmp/cloudflared && chmod +x /tmp/cloudflared && /tmp/cloudflared access ssh --hostname ${{ secrets.CF_SSH_HOSTNAME }}" \
-            -i ~/.ssh/id_ed25519 \
-            ${{ secrets.SERVER_USER }}@${{ secrets.CF_SSH_HOSTNAME }} \
-            'bash -s' < remote-deploy.sh 
+        # Execute deployment
+        ssh cf-tunnel 'bash -s' < deploy.sh 
