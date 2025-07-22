@@ -55,10 +55,22 @@ jobs:
         wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         sudo dpkg -i cloudflared-linux-amd64.deb
         
-        # Setup SSH key
+        # Setup SSH directory and key with proper permissions
         mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Write SSH private key and fix permissions
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
+        
+        # Fix potential key format issues
+        # Remove any Windows line endings and ensure proper format
+        sed -i 's/\r$//' ~/.ssh/id_ed25519
+        
+        # Verify key format
+        echo "Key format check:"
+        head -1 ~/.ssh/id_ed25519
+        tail -1 ~/.ssh/id_ed25519
         
         # Create SSH config for Cloudflare tunnel
         cat > ~/.ssh/config << 'EOF'
@@ -69,12 +81,21 @@ jobs:
             ProxyCommand cloudflared access ssh --hostname ${{ secrets.CF_SSH_HOSTNAME }}
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
+            IdentitiesOnly yes
+            LogLevel ERROR
         EOF
+        
+        chmod 600 ~/.ssh/config
         
     - name: Test SSH connection
       run: |
-        # Test the connection first
-        ssh cf-tunnel "echo 'SSH connection successful!' && whoami && pwd"
+        echo "Testing SSH connection..."
+        # Test with verbose output for debugging
+        ssh -v cf-tunnel "echo 'SSH connection successful!' && whoami && pwd && echo 'Docker check:' && docker --version" 2>&1 || {
+          echo "SSH connection failed. Trying alternative approach..."
+          # Try direct connection with cloudflared
+          cloudflared access ssh --hostname ${{ secrets.CF_SSH_HOSTNAME }} --id ${{ secrets.SERVER_USER }}@${{ secrets.CF_SSH_HOSTNAME }} -- echo "Direct cloudflared test"
+        }
         
     - name: Deploy to server
       run: |
@@ -84,10 +105,14 @@ jobs:
         set -e
         
         echo "🚀 Starting deployment..."
+        echo "Current user: $(whoami)"
+        echo "Current directory: $(pwd)"
+        echo "Docker version: $(docker --version)"
         
         # Create app directory
         mkdir -p ~/react-project-1
         cd ~/react-project-1
+        echo "Working in: $(pwd)"
         
         # Create docker-compose file
         cat > docker-compose.yml << 'COMPOSE_EOF'
@@ -106,12 +131,17 @@ jobs:
               retries: 3
         COMPOSE_EOF
         
+        echo "Docker compose file created:"
+        cat docker-compose.yml
+        
         # Pull and deploy
         echo "📦 Pulling latest image..."
         docker pull ${{ secrets.DOCKER_USERNAME }}/react-project-1:latest
         
-        echo "🔄 Restarting container..."
-        docker-compose down || true
+        echo "🔄 Stopping old container..."
+        docker-compose down || echo "No existing container to stop"
+        
+        echo "🚀 Starting new container..."
         docker-compose up -d
         
         echo "🧹 Cleanup old images..."
@@ -123,26 +153,36 @@ jobs:
         echo "🔍 Verifying deployment..."
         sleep 15
         
+        echo "Container status:"
+        docker ps --filter "name=react-project-1" || echo "No container found"
+        
         if docker ps | grep -q react-project-1; then
           echo "✅ Container is running"
-          docker ps --filter "name=react-project-1"
+          
+          # Check container logs
+          echo "Container logs (last 10 lines):"
+          docker logs react-project-1 --tail 10
           
           # Check if the service responds
           if wget --spider --quiet http://localhost:3000/health 2>/dev/null; then
             echo "✅ Health check passed"
             echo "🎉 Deployment successful!"
           else
-            echo "⚠️  Health check failed, but container is running"
-            echo "Container logs:"
+            echo "⚠️  Health check failed, checking container status..."
             docker logs react-project-1 --tail 20
           fi
         else
           echo "❌ Container failed to start"
           echo "Docker logs:"
-          docker logs react-project-1 --tail 20 || echo "No logs available"
+          docker logs react-project-1 --tail 20 2>/dev/null || echo "No logs available"
           exit 1
         fi
         EOF
         
-        # Execute deployment
-        ssh cf-tunnel 'bash -s' < deploy.sh 
+        # Execute deployment with error handling
+        echo "Executing deployment script..."
+        ssh cf-tunnel 'bash -s' < deploy.sh || {
+          echo "Deployment failed, trying to get more information..."
+          ssh cf-tunnel 'docker ps -a && docker logs react-project-1 --tail 50 2>/dev/null || echo "No container logs"'
+          exit 1
+        } 
