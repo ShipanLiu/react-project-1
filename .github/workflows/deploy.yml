@@ -123,7 +123,7 @@ jobs:
             container_name: react-project-1
             restart: unless-stopped
             ports:
-              - "3000:80"
+              - "3001:80"
             healthcheck:
               test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
               interval: 30s
@@ -138,11 +138,16 @@ jobs:
         echo "📦 Pulling latest image..."
         docker pull ${{ secrets.DOCKER_USERNAME }}/react-project-1:latest
         
-        echo "🔄 Stopping old container..."
-        docker-compose down || echo "No existing container to stop"
-        
-        echo "🚀 Starting new container..."
-        docker-compose up -d
+                 echo "🔄 Stopping old container..."
+         # Stop any existing react-project-1 container
+         docker stop react-project-1 2>/dev/null || echo "No existing container to stop"
+         docker rm react-project-1 2>/dev/null || echo "No existing container to remove"
+         
+         # Also try docker compose down in case it was started with compose
+         docker compose down || echo "No compose services to stop"
+         
+         echo "🚀 Starting new container..."
+         docker compose up -d
         
         echo "🧹 Cleanup old images..."
         docker image prune -f
@@ -164,7 +169,7 @@ jobs:
           docker logs react-project-1 --tail 10
           
           # Check if the service responds
-          if wget --spider --quiet http://localhost:3000/health 2>/dev/null; then
+          if wget --spider --quiet http://localhost:3001/health 2>/dev/null; then
             echo "✅ Health check passed"
             echo "🎉 Deployment successful!"
           else
