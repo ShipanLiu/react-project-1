@@ -109,12 +109,12 @@ jobs:
         echo "Current directory: $(pwd)"
         echo "Docker version: $(docker --version)"
         
-        # Create app directory
-        mkdir -p ~/react-project-1
-        cd ~/react-project-1
+        # Create app directory in the proper location
+        mkdir -p ~/projects/production/react_project_1/frontend
+        cd ~/projects/production/react_project_1/frontend
         echo "Working in: $(pwd)"
         
-        # Create docker-compose file
+        # Create docker-compose.yml file
         cat > docker-compose.yml << 'COMPOSE_EOF'
         version: '3.8'
         services:
@@ -124,11 +124,17 @@ jobs:
             restart: unless-stopped
             ports:
               - "3001:80"
+            networks:
+              - react-project-1
             healthcheck:
               test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
               interval: 30s
               timeout: 10s
               retries: 3
+        
+        networks:
+          react-project-1:
+            external: true
         COMPOSE_EOF
         
         echo "Docker compose file created:"
@@ -139,15 +145,15 @@ jobs:
         docker pull ${{ secrets.DOCKER_USERNAME }}/react-project-1:latest
         
                  echo "🔄 Stopping old container..."
-         # Stop any existing react-project-1 container
-         docker stop react-project-1 2>/dev/null || echo "No existing container to stop"
-         docker rm react-project-1 2>/dev/null || echo "No existing container to remove"
+         # Stop and remove existing container using docker compose
+         docker compose down || echo "No existing services to stop"
          
-         # Also try docker compose down in case it was started with compose
-         docker compose down || echo "No compose services to stop"
-         
-         echo "🚀 Starting new container..."
+         echo "🚀 Starting new container with docker compose..."
          docker compose up -d
+         
+         echo "Container started successfully!"
+         echo "Waiting for container to be ready..."
+         sleep 10
         
         echo "🧹 Cleanup old images..."
         docker image prune -f
