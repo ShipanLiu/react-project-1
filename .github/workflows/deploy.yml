@@ -116,7 +116,6 @@ jobs:
         
         # Create docker-compose.yml file
         cat > docker-compose.yml << 'COMPOSE_EOF'
-        version: '3.8'
         services:
           react-app:
             image: ${{ secrets.DOCKER_USERNAME }}/react-project-1:latest
@@ -147,6 +146,10 @@ jobs:
                  echo "🔄 Stopping old container..."
          # Stop and remove existing container using docker compose
          docker compose down || echo "No existing services to stop"
+         
+         # Force remove any existing container with the same name
+         docker stop react-project-1 2>/dev/null || echo "No container named react-project-1 to stop"
+         docker rm -f react-project-1 2>/dev/null || echo "No container named react-project-1 to remove"
          
          echo "🚀 Starting new container with docker compose..."
          docker compose up -d
