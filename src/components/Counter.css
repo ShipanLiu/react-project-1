@@ -1,0 +1,87 @@
+.counter-container {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 2.5rem;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  max-width: 600px;
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.counter-container h2 {
+  color: #667eea;
+  margin-bottom: 1rem;
+  font-size: 2rem;
+}
+
+.counter-container p {
+  color: #666;
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.counter-display {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 50%;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2rem auto;
+  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.3);
+  transition: transform 0.3s ease;
+}
+
+.counter-display:hover {
+  transform: scale(1.05);
+}
+
+.count-number {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.counter-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.counter-buttons .btn {
+  min-width: 120px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+  .counter-container {
+    padding: 2rem 1.5rem;
+    margin: 1rem;
+  }
+  
+  .counter-display {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .count-number {
+    font-size: 2rem;
+  }
+  
+  .counter-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .counter-buttons .btn {
+    width: 100%;
+    max-width: 200px;
+  }
+} 
