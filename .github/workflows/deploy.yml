@@ -60,7 +60,7 @@ jobs:
         chmod 700 ~/.ssh
         
         # Write SSH private key and fix permissions
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+        echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
         
         # Fix potential key format issues
